@@ -37,7 +37,7 @@ func Length(v fixed.Point26_6) fixed.Int26_6 {
 	return fixed.Int26_6(math.Sqrt(vx*vx + vy*vy))
 }
 
-//PathCommand is the type for the path command token
+// PathCommand is the type for the path command token
 type PathCommand fixed.Int26_6
 
 // Human readable path constants
@@ -60,7 +60,7 @@ func (p Path) ToSVGPath() string {
 		if i != 0 {
 			s += " "
 		}
-		switch PathCommand(p[i]) {
+		switch PathCommand(p[i] & 15) {
 		case PathMoveTo:
 			s += fmt.Sprintf("M%4.3f,%4.3f", float32(p[i+1])/64, float32(p[i+2])/64)
 			i += 3
@@ -125,7 +125,7 @@ func (p *Path) Stop(closeLoop bool) {
 // AddTo adds the Path p to q.
 func (p Path) AddTo(q Adder) {
 	for i := 0; i < len(p); {
-		switch PathCommand(p[i]) {
+		switch PathCommand(p[i] & 15) {
 		case PathMoveTo:
 			q.Stop(false) // Fixes issues #1 by described by Djadala; implicit close if currently in path.
 			q.Start(fixed.Point26_6{X: p[i+1], Y: p[i+2]})
@@ -150,6 +150,81 @@ func (p Path) AddTo(q Adder) {
 	q.Stop(false)
 }
 
+// **NEW** If a point is touched on a path then return the index of the point in the path
+func (p Path) TouchPoint(x, y, dist float32) int {
+	touched := -1
+	for i := 0; i < len(p) && touched < 0; {
+		switch PathCommand(p[i] & 15) {
+		case PathMoveTo:
+			fallthrough
+		case PathLineTo:
+			touched = checkTouch(p, i+1, x, y, dist)
+			i += 3
+		case PathQuadTo:
+			touched = checkTouch(p, i+1, x, y, dist)
+			if touched < 0 {
+				touched = checkTouch(p, i+3, x, y, dist)
+			}
+			i += 5
+		case PathCubicTo:
+			touched = checkTouch(p, i+1, x, y, dist)
+			if touched < 0 {
+				touched = checkTouch(p, i+3, x, y, dist)
+			}
+			if touched < 0 {
+				touched = checkTouch(p, i+5, x, y, dist)
+			}
+			i += 7
+		case PathClose:
+			i++
+		default:
+			panic("Bad path command")
+		}
+	}
+	return touched
+}
+
+// **NEW** Get the X,Y coordinate of the point in the path by index
+func (p Path) CheckIfPoint(i int) int {
+	if i-1 < 0 {
+		return -1
+	}
+	pc := PathCommand(p[i-1])
+	if pc == PathMoveTo || pc == PathLineTo {
+		return 1
+	} //hit point
+	if pc == PathQuadTo {
+		return 2
+	} //quad control point
+	if pc == PathCubicTo {
+		return 3
+	} //cubic control point left
+
+	if i-3 < 0 {
+		return -1
+	}
+	pc = PathCommand(p[i-3])
+	if pc == PathQuadTo {
+		return 1
+	} //hit point
+	if pc == PathCubicTo {
+		return 4
+	} //cubic control point right
+
+	if i-5 >= 0 && PathCommand(p[i-5]) == PathCubicTo {
+		return 1
+	} //hit point
+	return -1
+}
+
+func checkTouch(p Path, i int, px, py, dist float32) int {
+	tx, ty := float32(p[i])/64, float32(p[i+1])/64
+	if (px-dist) <= tx && (px+dist) >= tx && (py-dist) <= ty && (py+dist) >= ty {
+		return i
+	}
+	return -1
+}
+
 // ToLength scales the point to the length indicated by ln
 func ToLength(p fixed.Point26_6, ln fixed.Int26_6) (q fixed.Point26_6) {
 	if ln == 0 || (p.X == 0 && p.Y == 0) {
@@ -167,7 +242,7 @@ func ToLength(p fixed.Point26_6, ln fixed.Int26_6) (q fixed.Point26_6) {
 
 // ClosestPortside returns the closest of p1 or p2 on the port side of the
 // line from the bow to the stern. (port means left side of the direction you are heading)
-// isIntersecting is just convienice to reduce code, and if false returns false, because p1 and p2 are not valid
+// Intersecting is just convenient to reduce code, and if false returns false, because p1 and p2 are not valid
 func ClosestPortside(bow, stern, p1, p2 fixed.Point26_6, isIntersecting bool) (xt fixed.Point26_6, intersects bool) {
 	if isIntersecting == false {
 		return
