@@ -1,8 +1,8 @@
+**Note: The purpose of this fork is to enable editing of SVG files (Tim Skillman)**
+
 # rasterx
 
 Rasterx is a golang rasterizer that implements path stroking functions capable of SVG 2.0 compliant 'arc' joins and explicit loop closing. 
-
-
 
 * Paths can be explicity closed or left open, resulting in a line join or end caps. 
 * Arc joins are supported, which causes the extending edge from a Bezier curve to follow the radius of curvature at the end point rather than a straight line miter, resulting in a more fluid looking join. 
