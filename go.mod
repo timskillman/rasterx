@@ -1,4 +1,4 @@
-module github.com/srwiley/rasterx
+module github.com/timskillman/rasterx
 
 go 1.17
 
